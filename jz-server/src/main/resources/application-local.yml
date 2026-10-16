@@ -1,0 +1,13 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/moneykeeper?useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: your-database-password
+  jpa:
+    show-sql: true
+  flyway:
+    repair-on-migrate: true
+
+app:
+  cors:
+    allowed-origins: http://localhost:*

@@ -1,0 +1,53 @@
+# === IDE / OS ===
+.vscode/*
+!.vscode/launch.json
+.idea/
+*.iml
+.DS_Store
+Thumbs.db
+
+# === Logs / Temp ===
+*.log
+*.tmp
+*.swp
+*.bak
+
+# === 测试/数据文件（不入库） ===
+工作簿1*.xlsx
+test_*.py
+test_*.xlsx
+test_*.png
+reset_categories.sql
+
+# === Backend (jz-server / Maven) ===
+jz-server/target/
+jz-server/.mvn/
+jz-server/mvnw
+jz-server/mvnw.cmd
+
+# === Uni-App (jz-app) ===
+jz-app/node_modules/
+jz-app/unpackage/dist/
+jz-app/unpackage/res/icons/
+jz-app/unpackage/release/
+jz-app/.hbuilderx/
+
+# === Web (jz-web / Vite) ===
+jz-web/node_modules/
+jz-web/dist/
+jz-web/dist-ssr/
+
+jz-app/unpackage/cache/certdata
+jz-app/dist/build/
+jz-app/unpackage/cache/wgt/__UNI__1060BB1/pages/exportData/exportData.css
+jz-app/unpackage/cache/
+
+# === Android 本地打包 (android-app) ===
+android-app/output/
+android-app/keystore/*.jks
+android-app/keystore/*.keystore
+android-app/config/.gradle/
+
+# === 数据文件 ===
+*.xls
+*.xlsx

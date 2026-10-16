@@ -1,0 +1,132 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationBarTitleText": "记账",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/login/login",
+      "style": {
+        "navigationBarTitleText": "登录",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/register/register",
+      "style": {
+        "navigationBarTitleText": "注册",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/forgotPassword/forgotPassword",
+      "style": {
+        "navigationBarTitleText": "找回密码",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/settings/settings",
+      "style": {
+        "navigationBarTitleText": "账号设置"
+      }
+    },
+    {
+      "path": "pages/statistics/statistics",
+      "style": {
+        "navigationBarTitleText": "统计",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/budget/budget",
+      "style": {
+        "navigationBarTitleText": "预算",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/profile/profile",
+      "style": {
+        "navigationBarTitleText": "我的"
+      }
+    },
+    {
+      "path": "pages/alerts/alerts",
+      "style": {
+        "navigationBarTitleText": "预算预警",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/accountBooks/accountBooks",
+      "style": {
+        "navigationBarTitleText": "账本管理"
+      }
+    },
+    {
+      "path": "pages/addTransaction/addTransaction",
+      "style": {
+        "navigationBarTitleText": "记一笔",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/exportData/exportData",
+      "style": {
+        "navigationBarTitleText": "导出数据",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/searchFilter/searchFilter",
+      "style": {
+        "navigationBarTitleText": "筛选流水",
+        "navigationStyle": "custom"
+      }
+    },
+    {
+      "path": "pages/transactionList/transactionList",
+      "style": {
+        "navigationBarTitleText": "筛选结果",
+        "navigationStyle": "custom"
+      }
+    }
+  ],
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "账单",
+    "navigationBarBackgroundColor": "#F8F8F8",
+    "backgroundColor": "#F8F8F8"
+  },
+  "tabBar": {
+    "color": "#999999",
+    "selectedColor": "#667eea",
+    "borderStyle": "black",
+    "backgroundColor": "#FFFFFF",
+    "fontSize": "14px",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "账单",
+        "iconPath": "static/tabbar/account.png",
+        "selectedIconPath": "static/tabbar/account-active.png"
+      },
+      {
+        "pagePath": "pages/statistics/statistics",
+        "text": "统计",
+        "iconPath": "static/tabbar/statistics.png",
+        "selectedIconPath": "static/tabbar/statistics-active.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "我的",
+        "iconPath": "static/tabbar/profile.png",
+        "selectedIconPath": "static/tabbar/profile-active.png"
+      }
+    ]
+  }
+}

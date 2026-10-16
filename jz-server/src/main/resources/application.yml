@@ -1,0 +1,114 @@
+server:
+  port: 8070
+  tomcat:
+    connection-timeout: 120000
+
+spring:
+  profiles:
+    active: local
+  servlet:
+    multipart:
+      max-file-size: 500MB
+      max-request-size: 500MB
+  mvc:
+    async:
+      request-timeout: 120000
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    validate-on-migrate: false
+    locations: classpath:db/migration
+  mail:
+    host: smtp.example.com
+    port: 587
+    username: your-email@example.com
+    password: your-email-password
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          ssl:
+            enable: true
+          connectiontimeout: 30000
+          timeout: 30000
+          writetimeout: 30000
+
+app:
+  admin:
+    password: change-me-admin-password
+  jwt:
+    secret: change-this-to-a-random-secret-key-for-jwt-token-generation
+    expiration: 2592000000
+  export:
+    output-dir: exports
+    schedule-delay-ms: 60000
+    max-tasks-per-run: 1
+    zip-threshold-bytes: 10485760
+  classification:
+    rules:
+      - category-name: 餐饮
+        type: EXPENSE
+        keywords:
+          - 星巴克
+          - 瑞幸
+          - 奶茶
+          - 吃饭
+          - 餐厅
+          - 食堂
+          - kfc
+          - 麦当劳
+          - 必胜客
+      - category-name: 外卖
+        type: EXPENSE
+        keywords:
+          - 美团
+          - 饿了么
+          - 美团外卖
+          - 饿了么外卖
+      - category-name: 交通
+        type: EXPENSE
+        keywords:
+          - 滴滴
+          - 打车
+          - 地铁
+          - 公交
+          - 加油
+          - 停车
+          - 高铁
+          - 机票
+      - category-name: 日用品
+        type: EXPENSE
+        keywords:
+          - 淘宝
+          - 天猫
+          - 京东
+          - 拼多多
+          - 超市
+          - 便利店
+      - category-name: 工资
+        type: INCOME
+        keywords:
+          - 工资
+          - 薪资
+          - 奖金
+          - 年终奖
+          - 绩效
+      - category-name: 娱乐
+        type: EXPENSE
+        keywords:
+          - 电影
+          - ktv
+          - 游戏
+          - 网吧
+          - 旅游
+          - 酒店

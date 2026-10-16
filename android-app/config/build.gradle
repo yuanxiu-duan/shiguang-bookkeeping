@@ -1,0 +1,56 @@
+apply plugin: 'com.android.application'
+
+android {
+    compileSdk 33
+    namespace "com.moneykeeper.app"
+
+    defaultConfig {
+        applicationId "com.moneykeeper.app"
+        minSdkVersion 21
+        targetSdkVersion 33
+        versionCode 107
+        versionName "1.0.7"
+        ndk {
+            abiFilters 'armeabi-v7a', 'arm64-v8a', 'x86'
+        }
+    }
+
+    signingConfigs {
+        shiguang {
+            // 签名口令请勿硬编码，通过环境变量注入（与 scripts/build-apk.ps1 约定一致）：
+            //   KEYSTORE_KEY_ALIAS / KEYSTORE_KEY_PASSWORD / KEYSTORE_STORE_PASSWORD / KEYSTORE_PATH
+            keyAlias System.getenv('KEYSTORE_KEY_ALIAS') ?: 'shiguang'
+            keyPassword System.getenv('KEYSTORE_KEY_PASSWORD') ?: 'change-me-key-password'
+            storeFile file(System.getenv('KEYSTORE_PATH') ?: '../../../android-app/keystore/shiguang.jks')
+            storePassword System.getenv('KEYSTORE_STORE_PASSWORD') ?: 'change-me-key-password'
+        }
+    }
+
+    buildTypes {
+        release {
+            signingConfig signingConfigs.shiguang
+            minifyEnabled false
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+        debug {
+            signingConfig signingConfigs.shiguang
+            minifyEnabled false
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    aaptOptions {
+        additionalParameters '--auto-add-overlay'
+        ignoreAssetsPattern "!.svn:!.git:.*:!CVS:!thumbs.db:!picasa.ini:!*.scc:*~"
+    }
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+    implementation fileTree(include: ['*.aar'], dir: 'libs')
+}
