@@ -175,6 +175,7 @@
 
 <script>
 import { categoryApi } from '../../api/index.js';
+import { withGuard } from '../../utils/guard.js';
 
 export default {
   data() {
@@ -399,9 +400,12 @@ export default {
         account: this.form.account
       }
       const params = encodeURIComponent(JSON.stringify(payload))
-      uni.navigateTo({
-        url: '/pages/transactionList/transactionList?filters=' + params
-      })
+      // 防连点：避免连续打开多个流水页
+      return withGuard('searchFilter:confirm', () => {
+        uni.navigateTo({
+          url: '/pages/transactionList/transactionList?filters=' + params
+        })
+      }, 800)
     }
   }
 }
@@ -690,22 +694,6 @@ export default {
 .btn-reset::after {
   border: none;
 }
-
-.btn-confirm {
-  flex: 1;
-  height: 88rpx;
-  line-height: 88rpx;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  border: none;
-  border-radius: 44rpx;
-  font-size: 30rpx;
-}
-
-.btn-confirm::after {
-  border: none;
-}
-
 /* 日期弹窗 */
 .picker-mask {
   position: fixed;
@@ -723,7 +711,7 @@ export default {
 .picker-content {
   width: 640rpx;
   background: #fff;
-  border-radius: 24rpx;
+  border-radius: 32rpx;
   overflow: hidden;
 }
 

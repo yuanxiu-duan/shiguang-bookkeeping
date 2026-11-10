@@ -79,14 +79,20 @@
         </view>
       </view>
     </view>
+
+    <!-- 统一确认弹窗（替代系统 uni.showModal） -->
+    <confirm-dialog ref="confirmDialog" />
   </view>
 </template>
 
 <script>
 import { accountBookApi } from '../../api/index.js'
 import { storage } from '../../utils/storage.js'
+import { withGuard } from '../../utils/guard.js'
+import ConfirmDialog from '../../components/ConfirmDialog.vue'
 
 export default {
+  components: { ConfirmDialog },
   data() {
     return {
       accountBooks: [],
@@ -150,18 +156,21 @@ export default {
         uni.showToast({ title: '请输入账本名称', icon: 'none' })
         return
       }
-      try {
-        await accountBookApi.create({
-          name: this.addForm.name.trim(),
-          description: this.addForm.description.trim()
-        })
-        uni.showToast({ title: '创建成功', icon: 'success' })
-        this.showAddDialog = false
-        this.addForm = { name: '', description: '' }
-        this.loadData()
-      } catch (e) {
-        uni.showToast({ title: '创建失败', icon: 'none' })
-      }
+      // 防误触重复提交
+      return withGuard('accountBooks:add', async () => {
+        try {
+          await accountBookApi.create({
+            name: this.addForm.name.trim(),
+            description: this.addForm.description.trim()
+          })
+          uni.showToast({ title: '创建成功', icon: 'success' })
+          this.showAddDialog = false
+          this.addForm = { name: '', description: '' }
+          this.loadData()
+        } catch (e) {
+          uni.showToast({ title: '创建失败', icon: 'none' })
+        }
+      }, 1200)
     },
 
     handleLongPress(book) {
@@ -181,52 +190,55 @@ export default {
             }
             this.showEditDialog = true
           } else if (res.tapIndex === 1 && isOwn) {
-            uni.showModal({
-              title: '提示',
-              content: '确定要删除这个账本吗？删除后数据无法恢复。',
-              success: async (modalRes) => {
-                if (modalRes.confirm) {
-                  try {
-                    await accountBookApi.delete(book.id)
-                    if (this.currentBookId === book.id) {
-                      this.currentBookId = null
-                      storage.set('currentAccountBookId', null)
-                      if (this.currentUser?.id) {
-                        storage.set(`currentAccountBookId_${this.currentUser.id}`, null)
-                      }
-                    }
-                    uni.showToast({ title: '删除成功', icon: 'success' })
-                    this.loadData()
-                  } catch (e) {
-                    uni.showToast({ title: '删除失败', icon: 'none' })
+            const ok = await this.$refs.confirmDialog.open({
+              title: '删除账本',
+              content: '删除后该账本下的数据无法恢复，确定删除吗？',
+              danger: true,
+              confirmText: '删除'
+            })
+            if (!ok) return
+            return withGuard('accountBooks:delete:' + book.id, async () => {
+              try {
+                await accountBookApi.delete(book.id)
+                if (this.currentBookId === book.id) {
+                  this.currentBookId = null
+                  storage.set('currentAccountBookId', null)
+                  if (this.currentUser?.id) {
+                    storage.set(`currentAccountBookId_${this.currentUser.id}`, null)
                   }
                 }
+                uni.showToast({ title: '删除成功', icon: 'success' })
+                this.loadData()
+              } catch (e) {
+                uni.showToast({ title: '删除失败', icon: 'none' })
               }
-            })
+            }, 800)
           }
         }
       })
     },
 
     async handleEdit() {
-      try {
-        if (!this.editForm.isShared) {
-          if (!this.editForm.name.trim()) {
-            uni.showToast({ title: '请输入账本名称', icon: 'none' })
-            return
+      return withGuard('accountBooks:edit', async () => {
+        try {
+          if (!this.editForm.isShared) {
+            if (!this.editForm.name.trim()) {
+              uni.showToast({ title: '请输入账本名称', icon: 'none' })
+              return
+            }
+            await accountBookApi.update(this.editForm.id, {
+              name: this.editForm.name.trim(),
+              description: this.editForm.description.trim()
+            })
           }
-          await accountBookApi.update(this.editForm.id, {
-            name: this.editForm.name.trim(),
-            description: this.editForm.description.trim()
-          })
+          await accountBookApi.setAlias(this.editForm.id, this.editForm.alias.trim())
+          uni.showToast({ title: '更新成功', icon: 'success' })
+          this.showEditDialog = false
+          this.loadData()
+        } catch (e) {
+          uni.showToast({ title: '更新失败', icon: 'none' })
         }
-        await accountBookApi.setAlias(this.editForm.id, this.editForm.alias.trim())
-        uni.showToast({ title: '更新成功', icon: 'success' })
-        this.showEditDialog = false
-        this.loadData()
-      } catch (e) {
-        uni.showToast({ title: '更新失败', icon: 'none' })
-      }
+      }, 1200)
     }
   }
 }
@@ -386,7 +398,7 @@ export default {
   width: 600rpx;
   max-height: 70vh;
   background: #fff;
-  border-radius: 24rpx;
+  border-radius: 32rpx;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -444,34 +456,5 @@ export default {
   font-size: 28rpx;
   color: #909399;
   box-sizing: border-box;
-}
-
-.picker-footer {
-  display: flex;
-  padding: 20rpx 24rpx;
-  border-top: 1rpx solid #f0f0f0;
-  gap: 20rpx;
-}
-
-.btn-cancel {
-  flex: 1;
-  height: 80rpx;
-  line-height: 80rpx;
-  background: #f5f5f5;
-  color: #606266;
-  border: none;
-  border-radius: 40rpx;
-  font-size: 28rpx;
-}
-
-.btn-confirm {
-  flex: 1;
-  height: 80rpx;
-  line-height: 80rpx;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  border: none;
-  border-radius: 40rpx;
-  font-size: 28rpx;
 }
 </style>

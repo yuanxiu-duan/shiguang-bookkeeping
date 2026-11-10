@@ -1,6 +1,8 @@
 package com.moneykeeper.service;
 
 import com.moneykeeper.dto.AppFileUploadResponse;
+import com.moneykeeper.dto.AppPresignRequest;
+import com.moneykeeper.dto.AppPresignResponse;
 import com.moneykeeper.dto.AppReleaseRequest;
 import com.moneykeeper.dto.AppReleaseResponse;
 import com.moneykeeper.dto.AppUpdateResponse;
@@ -13,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -58,6 +61,48 @@ public class AppReleaseService {
      * 第二步：创建版本发布记录（文件已上传，只保存元数据）
      */
     @Transactional
+    /**
+     * 直传第一步：给浏览器签发一次性 PUT 地址（预签名），文件由浏览器直接传到对象存储，
+     * 数据不经过服务器，避免服务器 620KB/s 上行带宽成为瓶颈。
+     * <p>签名短时有效（30 分钟）且只能写这一个 key，浏览器侧即使泄露也只是一个临时上传地址，
+     * 拿不到长期密钥。</p>
+     */
+    public AppPresignResponse presignUpload(String platform, AppPresignRequest request) {
+        String fileName = request.getFileName() == null ? "" : request.getFileName().trim();
+        String lower = fileName.toLowerCase();
+
+        if (!lower.endsWith(".apk") && !lower.endsWith(".ipa")) {
+            throw new IllegalArgumentException("仅支持 .apk / .ipa 文件");
+        }
+        long size = request.getFileSize() == null ? 0L : request.getFileSize();
+        if (size <= 0) {
+            throw new IllegalArgumentException("文件大小不合法");
+        }
+        if (size > 500L * 1024 * 1024) {
+            throw new IllegalArgumentException("文件大小不能超过 500MB");
+        }
+
+        String contentType = lower.endsWith(".apk")
+                ? "application/vnd.android.package-archive"
+                : "application/octet-stream";
+
+        S3StorageService.PresignedUpload presigned = s3StorageService.presignPut(
+                "app/" + platform, fileName, contentType, Duration.ofMinutes(30));
+
+        log.info("APP文件直传预签名: file={}, size={}MB, key={}, expiresIn={}s",
+                fileName, size / 1024 / 1024, presigned.fullKey(), presigned.expiresInSeconds());
+
+        return new AppPresignResponse(
+                presigned.uploadUrl(),
+                presigned.fullKey(),
+                presigned.publicUrl(),
+                fileName,
+                size,
+                contentType,
+                presigned.expiresInSeconds()
+        );
+    }
+
     public AppReleaseResponse createRelease(AppReleaseRequest request) {
         if (appReleaseRepository.existsByVersionNameAndPlatform(request.getVersionName(), request.getPlatform())) {
             throw new IllegalArgumentException("该平台已存在相同版本号 " + request.getVersionName());

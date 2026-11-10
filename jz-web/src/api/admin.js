@@ -90,6 +90,57 @@ export function uploadAppFile(file, platform, onProgress) {
 }
 
 /**
+ * 直传（推荐）：先向服务端要一个一次性预签名地址，再由浏览器直接 PUT 到对象存储。
+ * 文件不经过服务器，绕开服务器上行带宽瓶颈（服务器到 R2 实测约 620KB/s，浏览器直传快 8 倍）。
+ * 预签名地址短时有效（30 分钟）、只能写这一个 key，浏览器即使泄露也拿不到长期密钥。
+ */
+export async function uploadAppFileDirect(file, platform, onProgress) {
+  const info = await request.post(
+    '/admin/app-releases/presign',
+    { fileName: file.name, fileSize: file.size },
+    { params: { platform: platform || 'android' } }
+  )
+
+  await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', info.uploadUrl)
+    // Content-Type 已参与签名，必须与服务端返回的完全一致
+    xhr.setRequestHeader('Content-Type', info.contentType)
+
+    if (onProgress) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          onProgress(e)
+        }
+      }
+    }
+
+    xhr.onload = function () {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        resolve()
+      } else {
+        reject(new Error(`上传到对象存储失败（HTTP ${xhr.status}）`))
+      }
+    }
+    xhr.onerror = function () {
+      reject(new Error('直传对象存储网络错误，请检查存储桶 CORS 配置'))
+    }
+    xhr.ontimeout = function () {
+      reject(new Error('上传超时，请重试'))
+    }
+
+    xhr.send(file)
+  })
+
+  return {
+    downloadUrl: info.downloadUrl,
+    fileKey: info.fileKey,
+    fileSize: info.fileSize,
+    fileName: info.fileName
+  }
+}
+
+/**
  * 第二步：提交版本发布信息（JSON body）
  */
 export function createAppRelease(data) {

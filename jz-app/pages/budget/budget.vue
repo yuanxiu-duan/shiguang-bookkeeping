@@ -161,15 +161,21 @@
         </view>
       </view>
     </view>
+
+    <!-- 统一确认弹窗（替代系统 uni.showModal） -->
+    <confirm-dialog ref="confirmDialog" />
   </view>
 </template>
 
 <script>
 import { budgetApi, categoryApi, accountBookApi } from '../../api/index.js'
 import { storage } from '../../utils/storage.js'
+import { withGuard } from '../../utils/guard.js'
 import { sumAmounts, toCents, subtractAmount } from '../../utils/money.js'
+import ConfirmDialog from '../../components/ConfirmDialog.vue'
 
 export default {
+  components: { ConfirmDialog },
   data() {
     return {
       statusBarHeight: 0,
@@ -290,21 +296,22 @@ export default {
             this.editBudget = { id: budget.id, amountLimit: String(budget.amountLimit) }
             this.showEditDialog = true
           } else if (res.tapIndex === 1) {
-            uni.showModal({
-              title: '提示',
-              content: '确定要删除这个预算吗？',
-              success: async (modalRes) => {
-                if (modalRes.confirm) {
-                  try {
-                    await budgetApi.deleteBudget(budget.id)
-                    uni.showToast({ title: '删除成功', icon: 'success' })
-                    this.loadData()
-                  } catch (e) {
-                    console.error(e)
-                  }
-                }
-              }
+            const ok = await this.$refs.confirmDialog.open({
+              title: '删除预算',
+              content: '删除后该预算设置将失效，确定删除吗？',
+              danger: true,
+              confirmText: '删除'
             })
+            if (!ok) return
+            return withGuard('budget:delete:' + budget.id, async () => {
+              try {
+                await budgetApi.deleteBudget(budget.id)
+                uni.showToast({ title: '删除成功', icon: 'success' })
+                this.loadData()
+              } catch (e) {
+                console.error(e)
+              }
+            }, 800)
           }
         }
       })
@@ -316,16 +323,18 @@ export default {
         return
       }
       
-      try {
-        await budgetApi.updateBudget(this.editBudget.id, {
-          amountLimit: parseFloat(this.editBudget.amountLimit)
-        })
-        uni.showToast({ title: '更新成功', icon: 'success' })
-        this.showEditDialog = false
-        this.loadData()
-      } catch (e) {
-        console.error(e)
-      }
+      return withGuard('budget:edit', async () => {
+        try {
+          await budgetApi.updateBudget(this.editBudget.id, {
+            amountLimit: parseFloat(this.editBudget.amountLimit)
+          })
+          uni.showToast({ title: '更新成功', icon: 'success' })
+          this.showEditDialog = false
+          this.loadData()
+        } catch (e) {
+          console.error(e)
+        }
+      }, 1200)
     },
     
     async handleAddBudget() {
@@ -341,20 +350,22 @@ export default {
       const now = new Date()
       const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
       
-      try {
-        await budgetApi.createBudget({
-          categoryId: this.addForm.categoryId,
-          month,
-          amountLimit: parseFloat(this.addForm.amountLimit),
-          alertThreshold: this.addForm.alertThreshold
-        })
-        uni.showToast({ title: '添加成功', icon: 'success' })
-        this.showAddDialog = false
-        this.addForm = { categoryId: null, amountLimit: '', alertThreshold: 80 }
-        this.loadData()
-      } catch (e) {
-        console.error(e)
-      }
+      return withGuard('budget:add', async () => {
+        try {
+          await budgetApi.createBudget({
+            categoryId: this.addForm.categoryId,
+            month,
+            amountLimit: parseFloat(this.addForm.amountLimit),
+            alertThreshold: this.addForm.alertThreshold
+          })
+          uni.showToast({ title: '添加成功', icon: 'success' })
+          this.showAddDialog = false
+          this.addForm = { categoryId: null, amountLimit: '', alertThreshold: 80 }
+          this.loadData()
+        } catch (e) {
+          console.error(e)
+        }
+      }, 1200)
     }
   }
 }
@@ -646,7 +657,7 @@ export default {
   width: 600rpx;
   max-height: 70vh;
   background: #fff;
-  border-radius: 24rpx;
+  border-radius: 32rpx;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -697,34 +708,5 @@ export default {
   border-radius: 12rpx;
   font-size: 28rpx;
   box-sizing: border-box;
-}
-
-.picker-footer {
-  display: flex;
-  padding: 20rpx 24rpx;
-  border-top: 1rpx solid #f0f0f0;
-  gap: 20rpx;
-}
-
-.btn-cancel {
-  flex: 1;
-  height: 80rpx;
-  line-height: 80rpx;
-  background: #f5f5f5;
-  color: #606266;
-  border: none;
-  border-radius: 40rpx;
-  font-size: 28rpx;
-}
-
-.btn-confirm {
-  flex: 1;
-  height: 80rpx;
-  line-height: 80rpx;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  border: none;
-  border-radius: 40rpx;
-  font-size: 28rpx;
 }
 </style>

@@ -118,10 +118,11 @@
       
       <button 
         class="btn-save" 
-        :disabled="!canSave"
+        :disabled="!canSave || submitting"
+        :loading="submitting"
         @click="handleSave"
       >
-        {{ isEditMode ? '保存修改' : '保存' }}
+        {{ submitting ? '保存中...' : (isEditMode ? '保存修改' : '保存') }}
       </button>
     </view>
 
@@ -242,6 +243,7 @@
 import { categoryApi, tagApi, transactionApi } from '../../api/index.js';
 import { offlineSync } from '../../utils/offlineSync.js';
 import { isOnline } from '../../utils/request.js';
+import { withGuard } from '../../utils/guard.js';
 
 export default {
   data() {
@@ -253,6 +255,8 @@ export default {
       isEditMode: false,
       editId: null,
       loading: false,
+      submitting: false,
+      saved: false,
       categories: { EXPENSE: [], INCOME: [] },
       tags: [],
       showAddTag: false,
@@ -311,7 +315,14 @@ export default {
 
   
   async onLoad(options) {
-    this.eventChannel = options.eventChannel
+    // 页面间通信：优先使用 uni-app 标准 API（APP/H5/小程序通用）
+    try {
+      this.eventChannel = (typeof this.getOpenerEventChannel === 'function')
+        ? this.getOpenerEventChannel()
+        : options.eventChannel
+    } catch (e) {
+      this.eventChannel = options.eventChannel
+    }
     // 获取状态栏高度
     const sysInfo = uni.getSystemInfoSync()
     this.statusBarHeight = sysInfo.statusBarHeight || 0
@@ -344,8 +355,18 @@ export default {
   
   methods: {
     goBack() {
-      if (this.eventChannel && this.eventChannel.emit) {
-        this.eventChannel.emit('transactionAdded')
+      // 仅在保存成功后通知上一页刷新，避免"打开编辑又取消"触发无意义刷新
+      if (this.saved) {
+        const payload = { action: this.isEditMode ? 'update' : 'create', id: this.editId }
+        try {
+          if (this.eventChannel && typeof this.eventChannel.emit === 'function') {
+            this.eventChannel.emit('transactionAdded', payload)
+          }
+        } catch (e) {
+          console.warn('通知上一页(事件通道)失败:', e)
+        }
+        // 全局事件兜底：兼容事件通道不可用的平台
+        uni.$emit('transaction:changed', payload)
       }
       uni.navigateBack({
         fail: () => {
@@ -381,15 +402,17 @@ export default {
         uni.showToast({ title: '请输入标签名称', icon: 'none' })
         return
       }
-      try {
-        const newTag = await tagApi.createTag({ name: this.newTagName.trim() })
-        this.tags.push(newTag)
-        this.form.tagIds.push(newTag.id)
-        this.showAddTag = false
-        this.newTagName = ''
-      } catch (e) {
-        uni.showToast({ title: '添加失败', icon: 'none' })
-      }
+      return withGuard('addTransaction:addTag', async () => {
+        try {
+          const newTag = await tagApi.createTag({ name: this.newTagName.trim() })
+          this.tags.push(newTag)
+          this.form.tagIds.push(newTag.id)
+          this.showAddTag = false
+          this.newTagName = ''
+        } catch (e) {
+          uni.showToast({ title: '添加失败', icon: 'none' })
+        }
+      }, 800)
     },
     
     async handleSuggest() {
@@ -434,23 +457,25 @@ export default {
         uni.showToast({ title: '请输入分类名称', icon: 'none' })
         return
       }
-      try {
-        const created = await categoryApi.createCategory({
-          name: this.newCategory.name.trim(),
-          type: this.form.type,
-          icon: this.newCategory.icon || '📌'
-        })
-        if (!this.categories[this.form.type]) {
-          this.categories[this.form.type] = []
+      return withGuard('addTransaction:addCategory', async () => {
+        try {
+          const created = await categoryApi.createCategory({
+            name: this.newCategory.name.trim(),
+            type: this.form.type,
+            icon: this.newCategory.icon || '📌'
+          })
+          if (!this.categories[this.form.type]) {
+            this.categories[this.form.type] = []
+          }
+          this.categories[this.form.type].push(created)
+          this.form.categoryId = created.id
+          this.showAddCategory = false
+          this.newCategory = { name: '', icon: '' }
+          uni.showToast({ title: '分类创建成功', icon: 'success' })
+        } catch (e) {
+          uni.showToast({ title: '创建失败', icon: 'none' })
         }
-        this.categories[this.form.type].push(created)
-        this.form.categoryId = created.id
-        this.showAddCategory = false
-        this.newCategory = { name: '', icon: '' }
-        uni.showToast({ title: '分类创建成功', icon: 'success' })
-      } catch (e) {
-        uni.showToast({ title: '创建失败', icon: 'none' })
-      }
+      }, 800)
     },
     
     onAmountInput(e) {
@@ -512,56 +537,67 @@ export default {
     },
 
     async handleSave() {
-      if (!this.canSave) return
-      
-      const data = {
-        amount: parseFloat(this.form.amount),
-        type: this.form.type,
-        categoryId: this.form.categoryId,
-        transactionDate: this.form.transactionDate,
-        note: this.form.note || null,
-        tagIds: this.form.tagIds.length > 0 ? this.form.tagIds : null,
-        account: this.account || null
-      }
-      
-      // 编辑模式：调用 update
-      if (this.isEditMode && this.editId) {
-        try {
-          await transactionApi.update(this.editId, data)
-          uni.showToast({ title: '修改成功', icon: 'success' })
-          setTimeout(() => {
-            this.goBack()
-          }, 1500)
-        } catch (e) {
-          uni.showToast({ title: e.message || '修改失败', icon: 'none' })
+      if (!this.canSave || this.submitting) return
+      // 防误触重复提交：同一时间段内的重复点击直接忽略
+      return withGuard('addTransaction:save', async () => {
+        this.submitting = true
+        const data = {
+          amount: parseFloat(this.form.amount),
+          type: this.form.type,
+          categoryId: this.form.categoryId,
+          transactionDate: this.form.transactionDate,
+          note: this.form.note || null,
+          tagIds: this.form.tagIds.length > 0 ? this.form.tagIds : null,
+          account: this.account || null
         }
-        return
-      }
-      
-      // 新增模式
-      const online = await isOnline()
-      
-      if (online) {
+
         try {
-          await transactionApi.create(data)
-          uni.showToast({ title: '保存成功', icon: 'success' })
-          setTimeout(() => {
-            this.goBack()
-          }, 1500)
-        } catch (e) {
-          offlineSync.addTransaction(data)
-          uni.showToast({ title: '保存到本地，待同步', icon: 'none' })
-          setTimeout(() => {
-            this.goBack()
-          }, 1500)
+          // 编辑模式：调用 update
+          if (this.isEditMode && this.editId) {
+            try {
+              await transactionApi.update(this.editId, data)
+              this.saved = true
+              uni.showToast({ title: '修改成功', icon: 'success' })
+              setTimeout(() => {
+                this.goBack()
+              }, 800)
+            } catch (e) {
+              uni.showToast({ title: e.message || '修改失败', icon: 'none' })
+            }
+            return
+          }
+
+          // 新增模式
+          const online = await isOnline()
+
+          if (online) {
+            try {
+              await transactionApi.create(data)
+              this.saved = true
+              uni.showToast({ title: '保存成功', icon: 'success' })
+              setTimeout(() => {
+                this.goBack()
+              }, 800)
+            } catch (e) {
+              offlineSync.addTransaction(data)
+              this.saved = true
+              uni.showToast({ title: '保存到本地，待同步', icon: 'none' })
+              setTimeout(() => {
+                this.goBack()
+              }, 800)
+            }
+          } else {
+            offlineSync.addTransaction(data)
+            this.saved = true
+            uni.showToast({ title: '离线保存，联网后同步', icon: 'none' })
+            setTimeout(() => {
+              this.goBack()
+            }, 800)
+          }
+        } finally {
+          this.submitting = false
         }
-      } else {
-        offlineSync.addTransaction(data)
-        uni.showToast({ title: '离线保存，联网后同步', icon: 'none' })
-        setTimeout(() => {
-          this.goBack()
-        }, 1500)
-      }
+      }, 1200)
     }
   }
 }
@@ -877,7 +913,7 @@ export default {
   width: 600rpx;
   max-height: 70vh;
   background: #fff;
-  border-radius: 24rpx;
+  border-radius: 32rpx;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -907,36 +943,6 @@ export default {
   font-size: 28rpx;
   box-sizing: border-box;
 }
-
-.picker-footer {
-  display: flex;
-  padding: 20rpx 24rpx;
-  border-top: 1rpx solid #f0f0f0;
-  gap: 20rpx;
-}
-
-.btn-cancel {
-  flex: 1;
-  height: 80rpx;
-  line-height: 80rpx;
-  background: #f5f5f5;
-  color: #606266;
-  border: none;
-  border-radius: 40rpx;
-  font-size: 28rpx;
-}
-
-.btn-confirm {
-  flex: 1;
-  height: 80rpx;
-  line-height: 80rpx;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  border: none;
-  border-radius: 40rpx;
-  font-size: 28rpx;
-}
-
 .suggest-content {
   padding: 30rpx 24rpx;
 }

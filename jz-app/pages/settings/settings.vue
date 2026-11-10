@@ -427,7 +427,7 @@ export default {
 .picker-content {
   width: 100%;
   background: #fff;
-  border-radius: 24rpx 24rpx 0 0;
+  border-radius: 32rpx 24rpx 0 0;
   padding-bottom: env(safe-area-inset-bottom);
 }
 
@@ -501,35 +501,6 @@ export default {
 .btn-code[disabled] {
   opacity: 0.6;
 }
-
-.picker-footer {
-  display: flex;
-  gap: 20rpx;
-  padding: 20rpx 30rpx 30rpx;
-}
-
-.btn-cancel {
-  flex: 1;
-  height: 88rpx;
-  line-height: 88rpx;
-  background: #f5f5f5;
-  color: #606266;
-  border: none;
-  border-radius: 44rpx;
-  font-size: 30rpx;
-}
-
-.btn-confirm {
-  flex: 1;
-  height: 88rpx;
-  line-height: 88rpx;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
-  border: none;
-  border-radius: 44rpx;
-  font-size: 30rpx;
-}
-
 .btn-confirm[disabled] {
   opacity: 0.6;
 }

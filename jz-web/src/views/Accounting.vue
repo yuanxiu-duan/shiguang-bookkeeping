@@ -140,23 +140,39 @@
         <el-card>
           <template #header>
             <div class="card-header">
-              <span class="card-title">最近7天记录</span>
-              <el-select 
-                v-model="filterTagId" 
-                placeholder="按标签筛选" 
-                clearable
-                size="small"
-                style="width: 150px;"
-                @change="loadTransactions"
-              >
-                <el-option label="全部" :value="null" />
-                <el-option
-                  v-for="tag in tagOptions"
-                  :key="tag.id"
-                  :label="tag.name"
-                  :value="tag.id"
+              <span class="card-title">{{ listTitle }}</span>
+              <div class="header-filters">
+                <el-date-picker
+                  v-model="filterDates"
+                  type="daterange"
+                  size="small"
+                  unlink-panels
+                  range-separator="至"
+                  start-placeholder="开始日期"
+                  end-placeholder="结束日期"
+                  value-format="YYYY-MM-DD"
+                  :shortcuts="dateShortcuts"
+                  :clearable="false"
+                  style="width: 260px;"
+                  @change="loadTransactions"
                 />
-              </el-select>
+                <el-select 
+                  v-model="filterTagId" 
+                  placeholder="按标签筛选" 
+                  clearable
+                  size="small"
+                  style="width: 150px;"
+                  @change="loadTransactions"
+                >
+                  <el-option label="全部" :value="null" />
+                  <el-option
+                    v-for="tag in tagOptions"
+                    :key="tag.id"
+                    :label="tag.name"
+                    :value="tag.id"
+                  />
+                </el-select>
+              </div>
             </div>
           </template>
           <div v-loading="loading" class="transactions-list">
@@ -269,6 +285,7 @@ import dayjs from 'dayjs'
 import { getCategories } from '@/api/category'
 import { 
   createTransaction, 
+  getTransactions,
   getRecentTransactions, 
   deleteTransaction,
   importTransactions,
@@ -298,6 +315,24 @@ const importResultVisible = ref(false)
 const suggestionVisible = ref(false)
 const suggestion = ref(null)
 const filterTagId = ref(null)
+// 右侧记录列表的日期范围，默认最近 7 天（含今天）
+const filterDates = ref([
+  dayjs().subtract(6, 'day').format('YYYY-MM-DD'),
+  dayjs().format('YYYY-MM-DD')
+])
+const dateShortcuts = [
+  { text: '最近7天', value: () => [dayjs().subtract(6, 'day').toDate(), new Date()] },
+  { text: '最近30天', value: () => [dayjs().subtract(29, 'day').toDate(), new Date()] },
+  { text: '本月', value: () => [dayjs().startOf('month').toDate(), new Date()] },
+  {
+    text: '上月',
+    value: () => [
+      dayjs().subtract(1, 'month').startOf('month').toDate(),
+      dayjs().subtract(1, 'month').endOf('month').toDate()
+    ]
+  },
+  { text: '今年', value: () => [dayjs().startOf('year').toDate(), new Date()] }
+]
 const tagOptions = ref([])
 const importResult = ref({
   successCount: 0,
@@ -326,8 +361,18 @@ const rules = {
 
 const currentCategories = computed(() => categories.value[form.type] || [])
 
-const groupedTransactions = computed(() => {
-  const groups = {}
+// 右侧列表标题：默认区间显示"最近7天记录"，自定义区间显示日期范围
+const listTitle = computed(() => {
+  const [startDate, endDate] = filterDates.value || []
+  if (!startDate || !endDate) return '最近7天记录'
+  if (startDate === dayjs().subtract(6, 'day').format('YYYY-MM-DD') &&
+      endDate === dayjs().format('YYYY-MM-DD')) {
+    return '最近7天记录'
+  }
+  return `${startDate} ~ ${endDate}`
+})
+
+const groupedTransactions = computed(() => {  const groups = {}
   transactions.value.forEach(t => {
     const date = t.transactionDate
     if (!groups[date]) {
@@ -357,13 +402,21 @@ async function loadTags() {
 async function loadTransactions() {
   loading.value = true
   try {
-    if (filterTagId.value) {
-      const { getTransactions } = await import('@/api/transaction')
-      const data = await getTransactions({ tagId: filterTagId.value, size: 100 })
-      transactions.value = data.content || data
-    } else {
+    const [startDate, endDate] = filterDates.value || []
+    const params = { size: 100 }
+    if (startDate) params.startDate = startDate
+    if (endDate) params.endDate = endDate
+    if (filterTagId.value) params.tagId = filterTagId.value
+
+    // 默认区间（最近7天）且未按标签筛选时，走原有的"最近记录"接口
+    if (!filterTagId.value &&
+        startDate === dayjs().subtract(6, 'day').format('YYYY-MM-DD') &&
+        endDate === dayjs().format('YYYY-MM-DD')) {
       const data = await getRecentTransactions(7)
       transactions.value = data
+    } else {
+      const data = await getTransactions(params)
+      transactions.value = data.content || data
     }
   } finally {
     loading.value = false
@@ -541,6 +594,15 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.header-filters {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .card-title {

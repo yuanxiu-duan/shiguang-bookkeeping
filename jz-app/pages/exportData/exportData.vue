@@ -19,14 +19,19 @@
     </view>
 
     <button class="export-btn" @click="handleExport">导出 Excel</button>
+
+    <!-- 统一确认弹窗（替代系统 uni.showModal） -->
+    <confirm-dialog ref="confirmDialog" />
   </view>
 </template>
 
 <script>
 import { accountBookApi, submitExportTask } from '../../api/index.js'
 import { storage } from '../../utils/storage.js'
+import ConfirmDialog from '../../components/ConfirmDialog.vue'
 
 export default {
+  components: { ConfirmDialog },
   data() {
     return {
       statusBarHeight: 0,
@@ -83,16 +88,14 @@ export default {
     async handleExport() {
       const bookId = storage.get('currentAccountBookId')
       if (!bookId) {
-        uni.showModal({
-          title: '提示',
-          content: '请先选择要导出数据的账本',
-          confirmText: '去选择',
-          success: (res) => {
-            if (res.confirm) {
-              uni.navigateTo({ url: '/pages/accountBooks/accountBooks' })
-            }
-          }
+        const goSelect = await this.$refs.confirmDialog.open({
+          title: '还没选择账本',
+          content: '导出数据前，请先选择要导出哪个账本',
+          confirmText: '去选择'
         })
+        if (goSelect) {
+          uni.navigateTo({ url: '/pages/accountBooks/accountBooks' })
+        }
         return
       }
 
@@ -101,10 +104,11 @@ export default {
       try {
         await submitExportTask(startDate, endDate)
         uni.hideLoading()
-        uni.showModal({
+        await this.$refs.confirmDialog.open({
           title: '提交成功',
           content: '账单流水导出任务已提交，服务端生成完成后会发送到您的绑定邮箱。',
-          showCancel: false
+          showCancel: false,
+          confirmText: '知道了'
         })
       } catch (e) {
         uni.hideLoading()

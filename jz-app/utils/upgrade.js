@@ -59,6 +59,78 @@ function setSkippedVersion(versionCode) {
 const upgradeManager = {
   _downloading: false,
   _downloadTask: null,
+  // 下载进度弹窗状态：App 端只创建一次原生等待框，后续用 setTitle 原地刷新，
+  // 不能每个 progress 事件都调 uni.showLoading（会反复销毁/重建 → 疯狂闪烁）
+  _waitingDialog: null,
+  _waitingFallback: false,
+  _lastProgressPct: -1,
+  _lastProgressTick: 0,
+
+  /**
+   * 显示下载进度弹窗（只调用一次）
+   */
+  _showProgressDialog(title) {
+    this._hideProgressDialog()
+
+    // #ifdef APP-PLUS
+    try {
+      this._waitingDialog = plus.nativeUI.showWaiting(title, { padlock: false })
+      return
+    } catch (e) {
+      console.warn('[Upgrade] 原生等待框创建失败，降级为 uni.showLoading:', e)
+    }
+    // #endif
+
+    this._waitingFallback = true
+    uni.showLoading({ title, mask: true })
+  },
+
+  /**
+   * 原地更新进度文案（不重建弹窗 → 不闪烁）
+   */
+  _updateProgressDialog(title) {
+    // #ifdef APP-PLUS
+    if (this._waitingDialog && typeof this._waitingDialog.setTitle === 'function') {
+      try {
+        this._waitingDialog.setTitle(title)
+        return
+      } catch (e) {
+        console.warn('[Upgrade] setTitle 失败，降级处理:', e)
+        this._waitingDialog = null
+      }
+    }
+    // #endif
+
+    // 非 App 端兜底：限流，最多 300ms 刷新一次，避免闪屏
+    if (!this._waitingFallback) {
+      this._waitingFallback = true
+    }
+    const now = Date.now()
+    if (now - this._lastProgressTick < 300) return
+    this._lastProgressTick = now
+    uni.showLoading({ title, mask: true })
+  },
+
+  /**
+   * 关闭下载进度弹窗
+   */
+  _hideProgressDialog() {
+    // #ifdef APP-PLUS
+    if (this._waitingDialog) {
+      try {
+        this._waitingDialog.close()
+      } catch (e) {
+        // 忽略重复关闭
+      }
+      this._waitingDialog = null
+    }
+    // #endif
+
+    this._waitingFallback = false
+    this._lastProgressTick = 0
+    this._lastProgressPct = -1
+    uni.hideLoading()
+  },
 
   /**
    * 检查并提示更新
@@ -194,13 +266,13 @@ const upgradeManager = {
     }
 
     this._downloading = true
-    uni.showLoading({ title: '正在下载更新 0%', mask: true })
+    this._showProgressDialog('正在下载更新 0%')
 
     const downloadTask = uni.downloadFile({
       url: downloadUrl,
       success: (res) => {
         this._downloading = false
-        uni.hideLoading()
+        this._hideProgressDialog()
 
         if (res.statusCode === 200) {
           this._installApk(res.tempFilePath, updateInfo)
@@ -215,7 +287,7 @@ const upgradeManager = {
       },
       fail: (err) => {
         this._downloading = false
-        uni.hideLoading()
+        this._hideProgressDialog()
 
         // 用户主动取消不算错误
         if (err.errMsg && err.errMsg.includes('abort')) {
@@ -241,11 +313,12 @@ const upgradeManager = {
 
     this._downloadTask = downloadTask
 
-    // 监听下载进度
+    // 监听下载进度：只在整数百分比变化时更新文案，且复用同一个弹窗
     downloadTask.onProgressUpdate((res) => {
-      if (res.progress > 0) {
-        uni.showLoading({ title: '正在下载更新 ' + res.progress + '%', mask: true })
-      }
+      const pct = Math.max(0, Math.min(100, Math.floor(res.progress || 0)))
+      if (pct === this._lastProgressPct) return
+      this._lastProgressPct = pct
+      this._updateProgressDialog('正在下载更新 ' + pct + '%')
     })
   },
 
@@ -300,7 +373,7 @@ const upgradeManager = {
       this._downloadTask.abort()
       this._downloading = false
       this._downloadTask = null
-      uni.hideLoading()
+      this._hideProgressDialog()
     }
   },
 

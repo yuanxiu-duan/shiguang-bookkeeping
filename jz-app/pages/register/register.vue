@@ -81,13 +81,18 @@
         <text @click="goLogin">已有账号？去登录</text>
       </view>
     </view>
+
+    <!-- 统一确认弹窗（替代系统 uni.showModal） -->
+    <confirm-dialog ref="confirmDialog" />
   </view>
 </template>
 
 <script>
 import { authApi } from '../../api/index.js'
+import ConfirmDialog from '../../components/ConfirmDialog.vue'
 
 export default {
+  components: { ConfirmDialog },
   data() {
     return {
       loading: false,
@@ -190,7 +195,7 @@ export default {
       } catch (e) {
         console.error('[register] failed:', e)
         const msg = (e && e.message) ? e.message : '注册失败，请稍后重试'
-        uni.showModal({
+        await this.$refs.confirmDialog.open({
           title: '注册失败',
           content: msg,
           showCancel: false,

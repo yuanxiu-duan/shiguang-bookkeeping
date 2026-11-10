@@ -65,8 +65,13 @@
           v-for="item in group.transactions" 
           :key="item.id || item._localId"
           class="transaction-item"
+          hover-class="transaction-item-hover"
+          :hover-stay-time="80"
           @click="viewDetail(item)"
-          @longpress="onItemLongPress(item)"
+          @touchstart="onItemTouchStart(item, $event)"
+          @touchmove="onItemTouchMove"
+          @touchend="onItemTouchEnd"
+          @touchcancel="onItemTouchEnd"
         >
           <view class="item-left">
             <view class="item-avatar">
@@ -108,6 +113,9 @@
     <view class="fab-button" @click="goToAddTransaction">
       <text class="fab-icon">+</text>
     </view>
+
+    <!-- 统一确认弹窗（替代系统 uni.showModal） -->
+    <confirm-dialog ref="confirmDialog" />
   </view>
 </template>
 
@@ -115,8 +123,11 @@
 import { accountBookApi, getMonthlySummary, transactionApi } from '../../api/index.js';
 import { storage } from '../../utils/storage.js';
 import { toCents } from '../../utils/money.js';
+import { withGuard } from '../../utils/guard.js';
+import ConfirmDialog from '../../components/ConfirmDialog.vue';
 
 export default {
+  components: { ConfirmDialog },
   data() {
     const now = new Date()
     return {
@@ -125,6 +136,7 @@ export default {
       firstLoad: true,
       loadError: false,
       noMoreData: false,
+      deleting: false,
       currentBookName: '默认账本',
       transactions: [],
       allTransactions: [],
@@ -347,18 +359,73 @@ export default {
     },
 
     viewDetail(item) {
-      this.onItemLongPress(item)
+      // 长按已经弹出操作菜单，抬手时系统补发的 click 直接忽略，避免菜单弹两次
+      if (this._pressFired) {
+        this._pressFired = false
+        return
+      }
+      this.showItemActions(item)
     },
 
     loadCurrentUser() {
       this.currentUser = storage.get('user_info')
     },
 
-    async onItemLongPress(item) {
-      if (!item.id) return
+    /* ---------- 长按：自己计时，不依赖 uni 的 longpress ----------
+       Android WebView 里 @longpress 常被文本选择/滑动手势抢走，表现为「长按没反应」。
+       这里用 touchstart/touchmove/touchend 自己判定：按住 420ms 且位移 < 12px 才算长按。 */
+    onItemTouchStart(item, e) {
+      this.clearItemPress()
+      const t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0])
+      if (!t) return
+      this._pressStart = {
+        x: t.clientX != null ? t.clientX : t.pageX,
+        y: t.clientY != null ? t.clientY : t.pageY
+      }
+      this._pressFired = false
+      this._pressTimer = setTimeout(() => {
+        this._pressTimer = null
+        this._pressStart = null
+        this._pressFired = true
+        // 长按生效给一下轻震动反馈，让用户确认按到了
+        try { uni.vibrateShort && uni.vibrateShort({}) } catch (err) {}
+        this.showItemActions(item)
+      }, 420)
+    },
+
+    onItemTouchMove(e) {
+      if (!this._pressStart) return
+      const t = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0])
+      if (!t) return
+      const x = t.clientX != null ? t.clientX : t.pageX
+      const y = t.clientY != null ? t.clientY : t.pageY
+      // 手指移动超过阈值即视为滑动列表，取消长按
+      if (Math.abs(x - this._pressStart.x) > 12 || Math.abs(y - this._pressStart.y) > 12) {
+        this.clearItemPress()
+      }
+    },
+
+    onItemTouchEnd() {
+      this.clearItemPress()
+    },
+
+    clearItemPress() {
+      this._pressStart = null
+      if (this._pressTimer) {
+        clearTimeout(this._pressTimer)
+        this._pressTimer = null
+      }
+    },
+
+    async showItemActions(item) {
+      if (!item || !item.id) return
+      // 上一个操作菜单还没关闭时忽略新触发，避免菜单叠加/错乱
+      if (this._actionSheetOpen) return
 
       const currentUserId = this.currentUser?.id
-      const isOwn = currentUserId != null && String(item.userId) === String(currentUserId)
+      // 列表没带 userId（或本地还没拿到登录用户）时不做拦截，交给后端校验
+      const isOwn = item.userId == null || currentUserId == null ||
+        String(item.userId) === String(currentUserId)
       // 检查是否是账本所有者
       let isBookOwner = false
       if (!isOwn) {
@@ -366,27 +433,30 @@ export default {
           const books = await accountBookApi.getList()
           const bookId = storage.get('currentAccountBookId')
           const currentBook = books.find(b => String(b.id) === String(bookId))
-          if (currentBook && currentUserId != null && String(currentBook.userId) === String(currentUserId)) {
-            isBookOwner = true
-          }
-        } catch (e) {}
+          isBookOwner = !!(currentBook && String(currentBook.userId) === String(currentUserId))
+        } catch (e) {
+          // 拉不到账本信息时不要静默拦掉（以前静默 return，长按看起来就像没反应）
+          isBookOwner = true
+        }
       }
 
-      if (!isOwn && !isBookOwner) return
-
-      const itemList = ['编辑']
-      if (isOwn || isBookOwner) {
-        itemList.push('删除')
+      if (!isOwn && !isBookOwner) {
+        uni.showToast({ title: '只能编辑自己记录的流水', icon: 'none' })
+        return
       }
 
+      this._actionSheetOpen = true
       uni.showActionSheet({
-        itemList,
+        itemList: ['编辑', '删除'],
         success: (res) => {
           if (res.tapIndex === 0) {
             this.openEditDialog(item)
           } else if (res.tapIndex === 1) {
             this.handleDelete(item)
           }
+        },
+        complete: () => {
+          this._actionSheetOpen = false
         }
       })
     },
@@ -413,23 +483,28 @@ export default {
       })
     },
 
-    handleDelete(item) {
-      uni.showModal({
-        title: '提示',
-        content: '确定要删除这条流水记录吗？',
-        success: async (modalRes) => {
-          if (modalRes.confirm) {
-            try {
-              await transactionApi.delete(item.id)
-              uni.showToast({ title: '删除成功', icon: 'success' })
-              this.refreshData()
-              this.loadSummary()
-            } catch (e) {
-              uni.showToast({ title: e.message || '删除失败', icon: 'none' })
-            }
-          }
-        }
+    async handleDelete(item) {
+      if (this.deleting) return
+      const ok = await this.$refs.confirmDialog.open({
+        title: '删除流水',
+        content: '删除后无法恢复，确定删除这条记录吗？',
+        danger: true,
+        confirmText: '删除'
       })
+      if (!ok) return
+      return withGuard('index:delete:' + item.id, async () => {
+        this.deleting = true
+        try {
+          await transactionApi.delete(item.id)
+          uni.showToast({ title: '删除成功', icon: 'success' })
+          this.refreshData()
+          this.loadSummary()
+        } catch (e) {
+          uni.showToast({ title: e.message || '删除失败', icon: 'none' })
+        } finally {
+          this.deleting = false
+        }
+      }, 800)
     },
 
     goToAddTransaction() {
@@ -650,6 +725,17 @@ export default {
   align-items: center;
   padding: 24rpx;
   border-bottom: 1rpx solid #f5f5f5;
+  /* 关键：长按不允许选中文字。否则 Android/iOS WebView 的原生长按（选词/呼出菜单）
+     会把手势吃掉，长按事件就不触发了 —— 这是「长按很难触发」的主因之一 */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  transition: background-color 0.15s ease;
+}
+
+/* 按下/长按过程中的视觉反馈，让用户知道按到了 */
+.transaction-item-hover {
+  background-color: #f2f4f7;
 }
 
 .transaction-item:last-child {
@@ -901,7 +987,7 @@ export default {
 .picker-content {
   width: 600rpx;
   background: #fff;
-  border-radius: 24rpx;
+  border-radius: 32rpx;
   overflow: hidden;
 }
 
@@ -934,44 +1020,5 @@ export default {
   border-radius: 12rpx;
   font-size: 28rpx;
   box-sizing: border-box;
-}
-
-.picker-footer {
-  display: flex;
-  border-top: 1rpx solid #f0f0f0;
-}
-
-.btn-cancel {
-  flex: 1;
-  padding: 24rpx 0;
-  text-align: center;
-  font-size: 30rpx;
-  color: #909399;
-  background: #fff;
-  border: none;
-  border-radius: 0;
-  line-height: 1;
-}
-
-.btn-cancel::after {
-  border: none;
-}
-
-.btn-confirm {
-  flex: 1;
-  padding: 24rpx 0;
-  text-align: center;
-  font-size: 30rpx;
-  color: #667eea;
-  font-weight: bold;
-  background: #fff;
-  border: none;
-  border-left: 1rpx solid #f0f0f0;
-  border-radius: 0;
-  line-height: 1;
-}
-
-.btn-confirm::after {
-  border: none;
 }
 </style>

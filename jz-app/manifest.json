@@ -2,8 +2,8 @@
     "name" : "拾光账本",
     "appid" : "__UNI__1060BB1",
     "description" : "个人财务记账",
-    "versionName" : "1.1.2",
-    "versionCode" : 112,
+    "versionName" : "1.1.7",
+    "versionCode" : 117,
     "transformPx" : false,
     "app-plus" : {
         "usingComponents" : true,

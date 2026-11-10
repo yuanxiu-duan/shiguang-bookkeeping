@@ -169,7 +169,7 @@
             >
               <el-button type="primary" :disabled="uploadState === 'uploading'">选择文件</el-button>
               <template #tip>
-                <div class="el-upload__tip">支持 .apk / .ipa 文件</div>
+                <div class="el-upload__tip">支持 .apk / .ipa 文件，浏览器直传对象存储（不占服务器带宽）</div>
               </template>
             </el-upload>
           </div>
@@ -249,7 +249,7 @@ import { Document, CircleCheck, CircleClose } from '@element-plus/icons-vue'
 import {
   getOssConfigs, createOssConfig, updateOssConfig, deleteOssConfig,
   activateOssConfig, testOssConnection,
-  getAppReleases, uploadAppFile, createAppRelease, publishAppRelease, unpublishAppRelease, deleteAppRelease
+  getAppReleases, uploadAppFileDirect, createAppRelease, publishAppRelease, unpublishAppRelease, deleteAppRelease
 } from '@/api/admin'
 
 const activeTab = ref('oss')
@@ -501,7 +501,7 @@ async function doUploadFile() {
   uploadError.value = ''
 
   try {
-    const result = await uploadAppFile(selectedFile.value, releaseForm.value.platform, (e) => {
+    const result = await uploadAppFileDirect(selectedFile.value, releaseForm.value.platform, (e) => {
       uploadProgress.value = Math.round((e.loaded / e.total) * 100)
     })
     uploadedFileInfo.value = result

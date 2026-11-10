@@ -157,6 +157,9 @@
         退出登录
       </button>
     </view>
+
+  <!-- 统一确认弹窗（替代系统 uni.showModal） -->
+  <confirm-dialog ref="confirmDialog" />
   </view>
 </template>
 
@@ -175,9 +178,10 @@ import { storage } from '../../utils/storage.js'
 import { offlineSync } from '../../utils/offlineSync.js'
 import upgradeManager from '../../utils/upgrade.js'
 import AppVersionInfo from '../../components/AppVersionInfo.vue'
+import ConfirmDialog from '../../components/ConfirmDialog.vue'
 
 export default {
-  components: { AppVersionInfo },
+  components: { ConfirmDialog, AppVersionInfo },
   data() {
     return {
       userInfo: null,
@@ -329,19 +333,17 @@ export default {
       }
     },
     
-    handleImport() {
+    async handleImport() {
       const bookId = storage.get('currentAccountBookId')
       if (!bookId) {
-        uni.showModal({
-          title: '提示',
-          content: '请先选择要导入数据的账本',
-          confirmText: '去选择',
-          success: (res) => {
-            if (res.confirm) {
-              uni.navigateTo({ url: '/pages/accountBooks/accountBooks' })
-            }
-          }
+        const goSelect = await this.$refs.confirmDialog.open({
+          title: '还没选择账本',
+          content: '导入数据前，请先选择要导入到哪个账本',
+          confirmText: '去选择'
         })
+        if (goSelect) {
+          uni.navigateTo({ url: '/pages/accountBooks/accountBooks' })
+        }
         return
       }
       uni.chooseFile({
@@ -360,24 +362,24 @@ export default {
               message += `，失败 ${result.failCount} 条`
             }
             
-            uni.showModal({
+            await this.$refs.confirmDialog.open({
               title: '导入完成',
               content: message,
               showCancel: false,
-              success: () => {
-                if (result.errors && result.errors.length > 0) {
-                  let errorMsg = result.errors.slice(0, 5).join('\n')
-                  if (result.errors.length > 5) {
-                    errorMsg += `\n...还有 ${result.errors.length - 5} 条错误`
-                  }
-                  uni.showModal({
-                    title: '错误详情',
-                    content: errorMsg,
-                    showCancel: false
-                  })
-                }
-              }
+              confirmText: '知道了'
             })
+            if (result.errors && result.errors.length > 0) {
+              let errorMsg = result.errors.slice(0, 5).join('\n')
+              if (result.errors.length > 5) {
+                errorMsg += `\n...还有 ${result.errors.length - 5} 条错误`
+              }
+              await this.$refs.confirmDialog.open({
+                title: '错误详情',
+                content: errorMsg,
+                showCancel: false,
+                confirmText: '知道了'
+              })
+            }
             
           } catch (e) {
             uni.hideLoading()
@@ -451,7 +453,7 @@ export default {
       upgradeManager.checkAndPrompt({ silent: false })
     },
 
-    showAbout() {
+    async showAbout() {
       const versionInfo = upgradeManager.getVersionInfo()
       // #ifdef APP-PLUS
       const platformText = versionInfo.platform === 'ios' ? 'iOS' : 'Android'
@@ -466,22 +468,22 @@ export default {
         + '支持离线记账、预算预警、多端同步、Excel导入导出'
       // #endif
 
-      uni.showModal({
+      await this.$refs.confirmDialog.open({
         title: '关于拾光账本',
         content: content,
-        showCancel: false
+        showCancel: false,
+        confirmText: '知道了'
       })
     },
     
     async handleLogout() {
-      const res = await uni.showModal({
-        title: '提示',
-        content: '确定要退出登录吗？',
-        confirmText: '退出',
-        confirmColor: '#f56c6c'
+      const ok = await this.$refs.confirmDialog.open({
+        title: '退出登录',
+        content: '退出后需要重新登录才能同步数据，确定退出吗？',
+        danger: true,
+        confirmText: '退出'
       })
-      
-      if (res.confirm) {
+      if (ok) {
         clearToken()
         storage.remove('user_info')
         uni.reLaunch({ url: '/pages/login/login' })

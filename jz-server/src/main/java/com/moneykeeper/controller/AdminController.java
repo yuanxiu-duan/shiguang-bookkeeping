@@ -97,6 +97,17 @@ public class AdminController {
     /**
      * 第二步：提交版本发布信息（JSON body，包含文件上传返回的信息）
      */
+    /**
+     * 直传第一步：只申请一个预签名上传地址，文件由浏览器直接传到对象存储（不占用服务器带宽）。
+     * 返回 uploadUrl 后，前端用 PUT 把文件传上去，再用返回的 fileKey/downloadUrl 调创建发布接口。
+     */
+    @PostMapping("/app-releases/presign")
+    public Result<AppPresignResponse> presignAppFile(
+            @Valid @RequestBody AppPresignRequest request,
+            @RequestParam(defaultValue = "android") String platform) {
+        return Result.success(appReleaseService.presignUpload(platform, request));
+    }
+
     @PostMapping("/app-releases")
     public Result<AppReleaseResponse> createAppRelease(
             @Valid @RequestBody AppReleaseRequest request) {

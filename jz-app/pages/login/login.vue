@@ -110,6 +110,9 @@
         <text @click="goForgotPassword">忘记密码？</text>
       </view>
     </view>
+
+    <!-- 统一确认弹窗（替代系统 uni.showModal） -->
+    <confirm-dialog ref="confirmDialog" />
   </view>
 </template>
 
@@ -117,8 +120,10 @@
 import { accountBookApi, authApi } from '../../api/index.js';
 import { setToken } from '../../utils/request.js';
 import { storage } from '../../utils/storage.js';
+import ConfirmDialog from '../../components/ConfirmDialog.vue';
 
 export default {
+  components: { ConfirmDialog },
   data() {
     return {
       loading: false,
@@ -264,7 +269,7 @@ export default {
       } catch (e) {
         console.error('[login] failed:', e)
         const msg = (e && e.message) ? e.message : '登录失败，请检查账号密码或网络'
-        uni.showModal({
+        await this.$refs.confirmDialog.open({
           title: '登录失败',
           content: msg,
           showCancel: false,
